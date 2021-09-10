@@ -127,18 +127,12 @@ static inline int rtai_select(int nfds, fd_set *readfds, fd_set *writefds,
 #define TST_DEV_PCAN_MAX	8
 
 /*Scaling factors for GUI*/
-#define LATENCY_SCALING_FACTOR 500
-#define BW_SCALING_FACTOR 5000
-
-#define CAN_2_CAN_FRAME_ID (0xA0)
-/**< Special identifier used to mark a CAN frame generated from CAN frame for the PC tool*/
-
-#define ETH_2_CAN_FRAME_ID (0xB0)
-/**< Special identifier used to mark an CAN frame routed from another Eth frame for the PC tool*/
-
+#define LATENCY_SCALING_FACTOR      500
+#define BW_SCALING_FACTOR   5000
 
 enum tst_status { NOK, OK, END };
 enum tst_seq_mode { FIXD, RAND, INCR };
+
 
 static enum {
 	TST_MODE_UNKNOWN,
@@ -193,8 +187,8 @@ static int tst_puts_timestamps = 0;
 static int tst_check_timestamps = 0;
 
 static FILE *tst_stdlog = NULL;
-static char *tst_stdlog_filename = NULL;
-//static char *tst_stdlog_filename = "pcanfdtst.log";
+//static char *tst_stdlog_filename = NULL;
+static char *tst_stdlog_filename = "pcanfdtst.log";
 
 static __u32 tst_flags = OFD_SAMPLEPT|PCANFD_INIT_TS_HOST_REL;
 //static __u32 tst_flags = OFD_SAMPLEPT|PCANFD_INIT_TS_DRV_REL;
@@ -241,6 +235,13 @@ static int tst_play_fd = -1;
 static int tst_play_loops = 1;
 
 static int exit_status = 0;
+
+#define CAN_ONLY        0xAA
+#define ETH_ONLY        0xBB
+#define ETH_AND_CAN     0xCC
+
+static int route = 0;
+/*Decides the route that CAN frames will take in gateway*/
 static int pipes_enabled = 1;
 /*Enable pipes in application. Enabled by default*/
 
@@ -248,9 +249,6 @@ static int pipes_enabled = 1;
 static int min_can_2_can_bridge_delay = 0xffffffff;
 static int max_can_2_can_bridge_delay = 0;
 static int avg_can_2_can_bridge_delay = 0;
-
-/*Variables to track CPU load values over CAN frame*/
-static float avg_cpu_load = 0;
 
 /*Variables to track Eth 2 CAN bridge delay*/
 static int min_eth_2_can_bridge_delay = 0xffffffff;
@@ -267,11 +265,11 @@ struct timeval start_of_eth_2_can;
 struct timeval end_of_eth_2_can;
 
 /*Named FIFO descriptors*/
-int fd_can_2_can_latency = 0; //For CAN 2 CAN latency values
-int fd_can_2_can_bw = 0; //For CAN 2 CAN Bandwidth
+int fd_can_2_can_latency = 0;  //For CAN 2 CAN latency values
+int fd_can_2_can_bw = 0;       //For CAN 2 CAN Bandwidth
 
-int fd_eth_2_can_latency = 0; //For Eth 2 CAN latency values
-int fd_eth_2_can_bw = 0; //For Eth 2 CAN Bandwidth
+int fd_eth_2_can_latency = 0;  //For Eth 2 CAN latency values
+int fd_eth_2_can_bw = 0;       //For Eth 2 CAN Bandwidth
 
 #ifdef ONE_TASK_PER_DEVICE
 
@@ -846,6 +844,7 @@ static int exit_application(int err)
 {
 	close_application();
 	double time_diff_usec = 0;
+
 	if (pcan_device_opened > 0) {
 
 		switch (tst_mode) {
@@ -858,17 +857,21 @@ static int exit_application(int err)
 			break;
 		case TST_MODE_RX:
 			lprintf(ALWAYS, "received frames: %u\n", tst_rx_count);
-			printf("Average CAN 2 CAN Delay : %d us\n", avg_can_2_can_bridge_delay);
-			printf("Max CAN 2 CAN Delay : %d us\n", max_can_2_can_bridge_delay);
-			printf("Average Eth 2 CAN Delay : %d us\n", avg_eth_2_can_bridge_delay);
-			printf("Max Eth 2 CAN Delay : %d us\n", max_eth_2_can_bridge_delay);
-			printf("Avg CPU Load : %f \n", avg_cpu_load);
-			time_diff_usec = ((double)end_of_can_2_can.tv_sec * 1000000 + (double)end_of_can_2_can.tv_usec);
-			time_diff_usec -= ((double)start_of_can_2_can.tv_sec * 1000000 + (double)start_of_can_2_can.tv_usec);
-			printf("CAN 2 CAN test ran for : %f us \n", time_diff_usec);
-			time_diff_usec = ((double)end_of_eth_2_can.tv_sec * 1000000 + (double)end_of_eth_2_can.tv_usec);
-			time_diff_usec -= ((double)start_of_eth_2_can.tv_sec * 1000000 + (double)start_of_eth_2_can.tv_usec);
-			printf("ETH 2 CAN test ran for : %f us \n", time_diff_usec);
+			printf("Average CAN 2 CAN Delay : %d us\n", avg_can_2_can_bridge_delay / 100);
+            printf("Max CAN 2 CAN Delay : %d us\n", max_can_2_can_bridge_delay / 100);
+
+            printf("Average Eth 2 CAN Delay : %d us\n", avg_eth_2_can_bridge_delay);
+            printf("Max Eth 2 CAN Delay : %d us\n", max_eth_2_can_bridge_delay);
+
+            time_diff_usec = ((double)end_of_can_2_can.tv_sec * 1000000 + (double)end_of_can_2_can.tv_usec);
+            time_diff_usec -= ((double)start_of_can_2_can.tv_sec * 1000000 + (double)start_of_can_2_can.tv_usec);
+
+            printf("CAN 2 CAN test ran for : %f us \n", time_diff_usec);
+
+            time_diff_usec = ((double)end_of_eth_2_can.tv_sec * 1000000 + (double)end_of_eth_2_can.tv_usec);
+            time_diff_usec -= ((double)start_of_eth_2_can.tv_sec * 1000000 + (double)start_of_eth_2_can.tv_usec);
+
+            printf("ETH 2 CAN test ran for : %f us \n", time_diff_usec);
 			break;
 		default:
 			break;
@@ -1773,11 +1776,13 @@ static enum tst_status handle_tx_tst(struct pcan_device *dev)
 			lprintf(DEBUG,
 				"CAN_Write(%p) returns %d\n", dev->handle, err);
 #else
-			usleep(tst_tx_pause_us); //add delay as specified
-			//debug
-			pcan_msg->data[0] = 0xA0;
-			pcan_msg->data[1] = 1;
-			pcan_msg->data[2] = 1;
+            usleep(tst_tx_pause_us); //add delay as specified
+
+            //automation changes
+            if(route != 0)
+            {
+                pcan_msg->data[0] = route;
+            }
 			err = pcanfd_send_msg(dev->fd, pcan_msg);
 			lprintf(DEBUG, "pcanfd_send_msg(%d, "
 				"msg id=%xh flags=%08xh len=%u) returns %d\n",
@@ -1989,19 +1994,19 @@ static enum tst_status handle_rx_tst(struct pcan_device *dev)
 {
 	struct pcanfd_msg *pcan_msg = dev->can_rx_msgs->list;
 	enum tst_status tst_status = OK;
-	int m, err, bridge_delay, cpu_load;
+	int m, err, bridge_delay;
 
-	double current_time_in_sec = 0;
-	int num_packets_sent_in_window = 0;
+    double current_time_in_sec = 0;
+    int    num_packets_sent_in_window = 0;
 
-	static int last_num_packets_count_can = 0;
-	static double last_updated_time_in_sec_can = 0;
+    static int    last_num_packets_count_can = 0;
+    static double last_updated_time_in_sec_can = 0;
 
-	static int last_num_packets_count_eth = 0;
-	static double last_updated_time_in_sec_eth = 0;
+    static int    last_num_packets_count_eth = 0;
+    static double last_updated_time_in_sec_eth = 0;
 
-	//For writing to named pipe
-	char string_buf[20];
+    //For writing to named pipe
+    char string_buf[20];
 
 	/* be sure to multi read *ONLY* when in RX mode (in TX mode, a single
 	 * read MUST be used because this function is called when at least ONE
@@ -2041,111 +2046,112 @@ static enum tst_status handle_rx_tst(struct pcan_device *dev)
 				dev->handle, err);
 		pcanmsg_to_fd(pcan_msg, &msgv1);
 #else
+		//Test automation changes
 		err = pcanfd_recv_msg(dev->fd, pcan_msg);
-		if(pcan_msg->data_len != 0)
-		{
-		//Get the min, max and average bridge delay from payload
-		memcpy(&bridge_delay, &(pcan_msg->data[7]), 4);
-		cpu_load = pcan_msg->data[11];
+        if(pcan_msg->data_len != 0)
+        {
+            //Get the min, max and average bridge delay from payload
+            memcpy(&bridge_delay, &(pcan_msg->data[7]), 4);
 
-		/*Calculate for CAN 2 CAN*/
-		if(pcan_msg->data[6] == CAN_2_CAN_FRAME_ID)
-		{
-		if(bridge_delay < min_can_2_can_bridge_delay) {
-		min_can_2_can_bridge_delay = bridge_delay;
-		}
+		lprintf(ALWAYS, "bridge_delay:%d,pcan_msg->data[6]:%d\n",
+				bridge_delay,pcan_msg->data[6]);
+            /*Calculate for CAN 2 CAN*/
+            if(pcan_msg->data[6] == 0)
+            {
+                if(bridge_delay < min_can_2_can_bridge_delay) {
+                    min_can_2_can_bridge_delay = bridge_delay;
+                }
 
-		if(bridge_delay > max_can_2_can_bridge_delay) {
-		max_can_2_can_bridge_delay = bridge_delay;
-		}
+                if(bridge_delay > max_can_2_can_bridge_delay) {
+                    max_can_2_can_bridge_delay = bridge_delay;
+                }
 
-		avg_can_2_can_bridge_delay = (avg_can_2_can_bridge_delay bridge_delay) / 2;
-		avg_cpu_load = ((float)avg_cpu_load (float)cpu_load) / 2.0;
+                avg_can_2_can_bridge_delay = (8 * avg_can_2_can_bridge_delay + 2 * bridge_delay) / 10;
 
-		if(can_2_can_counter++ == 0)
-		{
-		/*Get the start time*/
-		gettimeofday (&start_of_can_2_can, NULL);
-		}
+                if(can_2_can_counter++ == 0)
+                {
+                    /*Get the start time*/
+                    gettimeofday (&start_of_can_2_can, NULL);
+                }
 
-		/*Get the end time*/
-		gettimeofday (&end_of_can_2_can, NULL);
+                /*Get the end time*/
+                gettimeofday (&end_of_can_2_can, NULL);
 
-		current_time_in_sec = (double)end_of_can_2_can.tv_sec;
-		if((current_time_in_sec - last_updated_time_in_sec_can) >= 1)
-		{
-		last_updated_time_in_sec_can = current_time_in_sec;
-		/*1 second has elapsed. Get number of packets sent in this window*/
-		num_packets_sent_in_window = can_2_can_counter - last_num_packets_count_can;
-		last_num_packets_count_can = can_2_can_counter;
+                current_time_in_sec = (double)end_of_can_2_can.tv_sec;
+                if((current_time_in_sec - last_updated_time_in_sec_can) >= 1)
+                {
+                    last_updated_time_in_sec_can = current_time_in_sec;
+                    /*1 second has elapsed. Get number of packets sent in this window*/
+                    num_packets_sent_in_window = can_2_can_counter - last_num_packets_count_can;
+                    last_num_packets_count_can = can_2_can_counter;
 
-		/*Write CAN 2 CAN BW to pipe*/
-		if(fd_can_2_can_bw)
-		{
-		float value = (float)num_packets_sent_in_window/(float)BW_SCALING_FACTOR;
-		sprintf(string_buf, "%0.3f\n", value);
-		write(fd_can_2_can_bw, string_buf, strlen(string_buf) + 1);
-		}
+                    /*Write CAN 2 CAN BW to pipe*/
+                    if(fd_can_2_can_bw)
+                    {
+                        float value = (float)num_packets_sent_in_window/(float)BW_SCALING_FACTOR;
+                        sprintf(string_buf, "%0.3f\n", value);
+                        write(fd_can_2_can_bw, string_buf, strlen(string_buf) + 1);
+                    }
 
-		}
-		//write latency to PIPE
-		if(fd_can_2_can_latency && ((can_2_can_counter % 200) == 0))
-		{
-		float value = (float)avg_can_2_can_bridge_delay/(float)LATENCY_SCALING_FACTOR;
-		sprintf(string_buf, "%0.3f\n", value);
-		write(fd_can_2_can_latency, string_buf, strlen(string_buf) + 1);
-		}
+                }
+                //write latency to PIPE
+                if(fd_can_2_can_latency && ((can_2_can_counter % 200) == 0))
+                {
+                    float value = (float)avg_can_2_can_bridge_delay/(float)LATENCY_SCALING_FACTOR;
+                    sprintf(string_buf, "%0.3f\n", value);
+                    write(fd_can_2_can_latency, string_buf, strlen(string_buf) + 1);
+                }
 
-		}
+            }
 
-		/*Calculate for ETH 2 CAN*/
-		if(pcan_msg->data[6] == ETH_2_CAN_FRAME_ID)
-		{
-		if(bridge_delay < min_eth_2_can_bridge_delay) {
-		min_eth_2_can_bridge_delay = bridge_delay;
-		}
+            /*Calculate for ETH 2 CAN*/
+            if(pcan_msg->data[6] == 1)
+            {
+                if(bridge_delay < min_eth_2_can_bridge_delay) {
+                    min_eth_2_can_bridge_delay = bridge_delay;
+                }
 
-		if(bridge_delay > max_eth_2_can_bridge_delay) {
-		max_eth_2_can_bridge_delay = bridge_delay;
-		}
+                if(bridge_delay > max_eth_2_can_bridge_delay) {
+                    max_eth_2_can_bridge_delay = bridge_delay;
+                }
 
-		avg_eth_2_can_bridge_delay = (8 * avg_eth_2_can_bridge_delay + 2 * bridge_delay) / 10;
+                avg_eth_2_can_bridge_delay = (8 * avg_eth_2_can_bridge_delay + 2 * bridge_delay) / 10;
 
-		if(eth_2_can_counter++ == 0)
-		{
-		/*Get the start time*/
-		gettimeofday (&start_of_eth_2_can, NULL);
-		}
+                if(eth_2_can_counter++ == 0)
+                {
+                    /*Get the start time*/
+                    gettimeofday (&start_of_eth_2_can, NULL);
+                }
 
-		/*Get the end time*/
-		gettimeofday (&end_of_eth_2_can, NULL);
-		current_time_in_sec = (double)end_of_eth_2_can.tv_sec;
-		if((current_time_in_sec - last_updated_time_in_sec_eth) >= 1)
-		{
-		last_updated_time_in_sec_eth = current_time_in_sec;
-		/*1 second has elapsed. Get number of packets sent in this window*/
-		num_packets_sent_in_window = eth_2_can_counter - last_num_packets_count_eth;
-		last_num_packets_count_eth = eth_2_can_counter;
+                /*Get the end time*/
+                gettimeofday (&end_of_eth_2_can, NULL);
+                current_time_in_sec = (double)end_of_eth_2_can.tv_sec;
+                if((current_time_in_sec - last_updated_time_in_sec_eth) >= 1)
+                {
+                    last_updated_time_in_sec_eth = current_time_in_sec;
+                    /*1 second has elapsed. Get number of packets sent in this window*/
+                    num_packets_sent_in_window = eth_2_can_counter - last_num_packets_count_eth;
+                    last_num_packets_count_eth = eth_2_can_counter;
 
-		/*Write ETH 2 CAN BW to pipe*/
-		if(fd_eth_2_can_bw)
-		{
-		float value = (float)num_packets_sent_in_window/(float)BW_SCALING_FACTOR;
-		sprintf(string_buf, "%0.3f\n", value);
-		write(fd_eth_2_can_bw, string_buf, strlen(string_buf) + 1);
-		}
-		}
+                    /*Write ETH 2 CAN BW to pipe*/
+                    if(fd_eth_2_can_bw)
+                    {
+                        float value = (float)num_packets_sent_in_window/(float)BW_SCALING_FACTOR;
+                        sprintf(string_buf, "%0.3f\n", value);
+                        write(fd_eth_2_can_bw, string_buf, strlen(string_buf) + 1);
+                    }
+                }
 
-		//write latency to PIPE
-		if(fd_eth_2_can_latency && ((eth_2_can_counter % 200) == 0))
-		{
-		float value = (float)avg_eth_2_can_bridge_delay/(float)LATENCY_SCALING_FACTOR;
-		sprintf(string_buf, "%0.3f\n", value);
-		write(fd_eth_2_can_latency, string_buf, strlen(string_buf) + 1);
-		}
-		}
+                //write latency to PIPE
+                if(fd_eth_2_can_latency && ((eth_2_can_counter % 200) == 0))
+                {
+                    float value = (float)avg_eth_2_can_bridge_delay/(float)LATENCY_SCALING_FACTOR;
+                    sprintf(string_buf, "%0.3f\n", value);
+                    write(fd_eth_2_can_latency, string_buf, strlen(string_buf) + 1);
+                }
+            }
 
-		}
+        }
 		lprintf(DEBUG, "pcanfd_recv_msg(%d) returns %d\n",
 				dev->fd, err);
 #endif
@@ -2362,9 +2368,9 @@ static enum tst_status handle_single_device(struct pcan_device *pdev)
 	if (tst_mode == TST_MODE_TX)
 		tst = handle_tx_tst(pdev);
 
-	//if (pdev->pause_us)
-	//	if (usleep(pdev->pause_us))
-	//		tst = handle_errno(errno, pdev);
+//	if (pdev->pause_us)
+//		if (usleep(pdev->pause_us))
+//			tst = handle_errno(errno, pdev);
 
 	return tst;
 }
@@ -3170,9 +3176,15 @@ int main(int argc, char *argv[])
 			tst_mode = TST_MODE_REC;
 		} else if (!strncmp(argv[i], "none", 4)) {
 			tst_mode = TST_MODE_NONE;
-		} else if (!strcmp(argv[i], "NO_GUI")) {
-			pipes_enabled = 0; /*Disable pipes if no GUI*/
-		} else if (pcan_device_count < TST_DEV_PCAN_MAX) {
+        } else if (!strcmp(argv[i], "CAN_ONLY")) {
+            route = CAN_ONLY;
+        } else if (!strcmp(argv[i], "ETH_ONLY")) {
+            route = ETH_ONLY;
+           } else if (!strcmp(argv[i], "ETH_AND_CAN")) {
+            route = ETH_AND_CAN;
+        } else if (!strcmp(argv[i], "NO_GUI")) {
+            pipes_enabled = 0;  /*Disable pipes if no GUI*/
+        } else if (pcan_device_count < TST_DEV_PCAN_MAX) {
 			memset(pdev, '\0', sizeof(*pdev));
 
 			pdev->name = argv[i];
@@ -3245,55 +3257,56 @@ int main(int argc, char *argv[])
 #endif
 #endif /* RT */
 
- //GUI automation code
- //Open pipes to send data
+//	run_application();
+    //GUI automation code
+    //Open pipes to send data
 
-if(tst_mode == TST_MODE_RX && pipes_enabled)
-{
-if((fd_can_2_can_latency = open("/tmp/can-latency-pipe", O_WRONLY)) < 0)
-{
-printf("Could not open can 2 can latency FIFO \n");
-}
+    if(tst_mode == TST_MODE_RX && pipes_enabled)
+    {
+        if((fd_can_2_can_latency = open("/tmp/can-latency-pipe", O_WRONLY)) < 0)
+        {
+            printf("Could not open can 2 can latency FIFO \n");
+        }
 
-if((fd_can_2_can_bw = open("/tmp/can-bw-pipe", O_WRONLY)) < 0)
-{
-printf("Could not open can 2 can BW FIFO \n");
-}
+        if((fd_can_2_can_bw = open("/tmp/can-bw-pipe", O_WRONLY)) < 0)
+        {
+            printf("Could not open can 2 can BW FIFO \n");
+        }
 
-if((fd_eth_2_can_latency = open("/tmp/e2c-latency-pipe", O_WRONLY)) < 0)
-{
-printf("Could not open eth 2 can latency FIFO \n");
-}
+        if((fd_eth_2_can_latency = open("/tmp/e2c-latency-pipe", O_WRONLY)) < 0)
+        {
+            printf("Could not open eth 2 can latency FIFO \n");
+        }
 
-if((fd_eth_2_can_bw = open("/tmp/e2c-bw-pipe", O_WRONLY)) < 0)
-{
-printf("Could not open eth 2 can BW FIFO \n");
-}
-}
+        if((fd_eth_2_can_bw = open("/tmp/e2c-bw-pipe", O_WRONLY)) < 0)
+        {
+            printf("Could not open eth 2 can BW FIFO \n");
+        }
+    }
 
-run_application();
+    run_application();
 
-//Close the named pipes
+    //Close the named pipes
 
-if(fd_can_2_can_latency)
-{
-close(fd_can_2_can_latency);
-}
+    if(fd_can_2_can_latency)
+    {
+        close(fd_can_2_can_latency);
+    }
 
-if(fd_can_2_can_bw)
-{
-close(fd_can_2_can_bw);
-}
+    if(fd_can_2_can_bw)
+    {
+        close(fd_can_2_can_bw);
+    }
 
-if(fd_eth_2_can_latency)
-{
-close(fd_eth_2_can_latency);
-}
+    if(fd_eth_2_can_latency)
+    {
+        close(fd_eth_2_can_latency);
+    }
 
-if(fd_eth_2_can_bw)
-{
-close(fd_eth_2_can_bw);
-}
-
+    if(fd_eth_2_can_bw)
+    {
+        close(fd_eth_2_can_bw);
+    }
+    
 	return exit_application(exit_status);
 }
