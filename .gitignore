@@ -1,0 +1,15 @@
+*.o
+lib/lib/
+lib/lib32/
+driver/.pcan.ko.cmd
+driver/.pcan.mod.cmd
+driver/.pcan.mod.o.cmd
+driver/.pcan.o.cmd
+driver/Module.symvers
+driver/modules.order
+driver/pcan.*
+driver/src/.*
+libpcanbasic/examples/c++/*
+*.log
+libpcanbasic/pcanbasic/*
+libpcanbasic/pcaninfo/*
