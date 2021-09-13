@@ -1,0 +1,14 @@
+#This is a sample App config. You can use this as a template to create your own configuration.
+
+#The PCAN connection below is for MCAN4. Run lspcan command with the PCAN-USB tool connected, to find out the name of the connection
+/dev/pcanusbfd32 - 0xD0
+#The PCAN connection below is for MCAN9
+/dev/pcanusbfd33 - 0xE0
+#This is the primary Ethernet interface. It can be anything but recommendation is to use the built-in Ethernet adapter
+enp0s31f6 - 00:68:eb:87:17:b1
+#This is the secondary Ethernet interface.
+enx0068eb8717b3 - 00:68:eb:87:17:b3
+#This is the MAC address for Gateway. You can get this from the CCS or UART logs.
+gateway - 70:ff:76:1d:92:c3
+
+# Remove all comments starting with # before using this file
