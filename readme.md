@@ -1,6 +1,7 @@
 # Gateway Demo Setup
 ## guide
 <https://software-dl.ti.com/jacinto7/esd/processor-sdk-rtos-j7200/07_03_00_07/exports/docs/gateway-demos/docs/Can-Eth-User_Guide.html>
+
 <https://software-dl.ti.com/jacinto7/esd/processor-sdk-rtos-jacinto7/08_00_00_12/exports/docs/gateway-demos/docs/Can-Eth-User_Guide.html>
 
 ## build the demo 
@@ -54,18 +55,6 @@ Run the demo that based startJacinto
 ```
 make ...
 ```
-
-2. run below 
-sudo ./recv_1722.out --eth_interface eno1 --timeout 12 --pipes 0 --verbosity verbose
-sudo ./send_1722.out --eth_interface eno1 --gateway_mac 70:ff:76:1d:9f:4f --dst_mac ec:f4:bb:15:36:a4 --ipg 1000 --route ETH --num_packets 10
-./pcanfdtst tx ETH_ONLY  --bitrate 1000000 --dbitrate 5000000 --clock 80000000 -n 1 -ie 0xD0 --fd -l 64 --tx-pause-us 1000 /dev/pcanusbfd32
-./peak-linux-driver-8.9.3/test$ python3 pctools/run_demo.py --iterations 1 --run_time 5 --system_test 0 --gui_enabled 0
-
-
-
-
-3. run ETH2ETH
-
 
 # LOG 
 ## MCU_log  r5f_0
